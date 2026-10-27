@@ -16,3 +16,7 @@ I switched to a shell command 'stty' to monitor the serial port, and put that in
 ## 2: Shell
 
 As an excuse to play, and because I like simple, I converted the makefile to shell scripts. Most wouldn't like this, I know. But the point of 'make' is to avoid building everything at once, which totally doesn't apply here. The new commands work.
+
+## 3: Braces
+
+More playing with Claude, I had it move the opening braces of functions to the same lines, lol.
