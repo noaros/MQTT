@@ -34,19 +34,19 @@
 #define HSI_HZ        16000000u
 #define BAUD          115200u
 
-static volatile uint32_t ticks_ms;
+volatile uint32_t ticks_ms;
 
 void SysTick_Handler(void) {
     ticks_ms++;
 }
 
-static void delay_ms(uint32_t ms) {
+void delay_ms(uint32_t ms) {
     uint32_t start = ticks_ms;
     while (ticks_ms - start < ms) {
     }
 }
 
-static void uart_init(void) {
+void uart_init(void) {
     RCC_AHB1ENR |= 1u << 3;   /* GPIODEN */
     RCC_APB1ENR |= 1u << 18;  /* USART3EN */
 
@@ -59,19 +59,19 @@ static void uart_init(void) {
     USART3_CR1 = (1u << 13) | (1u << 3);  /* UE | TE */
 }
 
-static void uart_putc(char c) {
+void uart_putc(char c) {
     while (!(USART3_SR & (1u << 7))) {  /* wait for TXE */
     }
     USART3_DR = (uint32_t)c;
 }
 
-static void uart_puts(const char *s) {
+void uart_puts(const char *s) {
     while (*s) {
         uart_putc(*s++);
     }
 }
 
-static void systick_init(void) {
+void systick_init(void) {
     SYST_RVR = HSI_HZ / 1000 - 1;  /* 1 ms tick */
     SYST_CVR = 0;
     SYST_CSR = 7;                  /* CLKSOURCE = core | TICKINT | ENABLE */
