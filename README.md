@@ -8,3 +8,7 @@ The challenge in a post Claude world is how to still learn things efficiently wh
 
 This is just a typical starting point, a board with flashed firmware that periodically prints something to a serial port. I'll put it in branch 0. 
 I ran 'make' then 'make flash' then saw the 'hello' output after running 'picocom -b 115200 /dev/ttyACM0'
+
+## 1: Monitor
+
+I switched to a shell command 'stty' to monitor the serial port, and put that into the makefile.
