@@ -1,6 +1,8 @@
 TARGET  := hello
 BUILD   := build
 SRCS    := src/startup.c src/main.c
+PORT    := /dev/ttyACM0
+BAUD    := 115200
 
 CC      := arm-none-eabi-gcc
 OBJCOPY := arm-none-eabi-objcopy
@@ -30,7 +32,10 @@ $(BUILD)/$(TARGET).bin: $(BUILD)/$(TARGET).elf
 flash: $(BUILD)/$(TARGET).elf
 	STM32_Programmer_CLI -c port=SWD -w $< -v -rst
 
+monitor:
+	(stty $(BAUD) raw -echo; cat) < $(PORT)
+
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all flash clean
+.PHONY: all flash monitor clean
