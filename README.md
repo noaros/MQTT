@@ -20,3 +20,7 @@ As an excuse to play, and because I like simple, I converted the makefile to she
 ## 3: Braces
 
 More playing with Claude, I had it move the opening braces of functions to the same lines, lol.
+
+## 4: Static
+
+Removed 'static' keyword for less visual clutter. It really does look so much cleaner, but the trade-off is slightly larger file size, worse optimization, and global conflict. Most would probably want the keyword, so I really should just get used to it. Maybe in the next project. It is fun think about the tradeoffs. And amazing how one refactoring vs another, even an unconventional one like this, is a simple Claude request away.
