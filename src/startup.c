@@ -32,26 +32,26 @@ void (*const vector_table[16])(void) = {
     SysTick_Handler,          /* 15: SysTick */
 };
 
-void Reset_Handler(void)
-{
+void Reset_Handler(void) {
     /* Copy .data initial values from flash to RAM */
     uint32_t *src = &_sidata;
     uint32_t *dst = &_sdata;
-    while (dst < &_edata)
+    while (dst < &_edata) {
         *dst++ = *src++;
+    }
 
     /* Zero .bss */
-    for (dst = &_sbss; dst < &_ebss; dst++)
+    for (dst = &_sbss; dst < &_ebss; dst++) {
         *dst = 0;
+    }
 
     main();
 
-    for (;;)
-        ;
+    for (;;) {
+    }
 }
 
-void Default_Handler(void)
-{
-    for (;;)
-        ;
+void Default_Handler(void) {
+    for (;;) {
+    }
 }
