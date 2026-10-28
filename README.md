@@ -50,7 +50,7 @@ I had a choice between lwIP and Mongoose. The latter is made by the company who 
 
 This goes with the previous iteration, and connects the protocol logic to the physical network hardware. The order could have been reversed, but testing it would have involved writing throwaway code. 
 
-## 10: Mosquito
+## 10: Mosquitto
 
 The MQTT server, installed on my laptop and not represented in the codebase.
 
