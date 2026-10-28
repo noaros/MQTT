@@ -4,4 +4,4 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 ./build.sh
-STM32_Programmer_CLI -c port=SWD -w build/hello.elf -v -rst
+STM32_Programmer_CLI -c port=SWD -w build/mqtt.elf -v -rst

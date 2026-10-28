@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Compile and link the firmware into build/hello.elf and build/hello.bin.
+# Compile and link the firmware into build/mqtt.elf and build/mqtt.bin.
 set -euo pipefail
 cd "$(dirname "$0")"
 
-TARGET=hello
+TARGET=mqtt
 BUILD=build
 SRCS=(src/startup.c src/main.c)
 
