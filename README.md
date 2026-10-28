@@ -31,4 +31,4 @@ Removed 'static' keyword for less visual clutter. It really does look so much cl
 
 ## 5: Temperature!
 
-Read and print the temperature periodically instead of 'hello'. Rename build file.
+Read and print the temperature periodically instead of 'hello'. Rename build output file.
