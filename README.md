@@ -45,3 +45,7 @@ Setup Ethernet hardware (PHY), turn on auto-negotiation for a faster, more typic
 ## 8: Network stack
 
 I had a choice between lwIP and Mongoose. The latter is made by the company who made the demo that got me started on this journey with my very first project in this repo. That was tempting, plus it is simpler and so fits my style. However, there are annoying license terms that would keep others from using it in real world settings, so I went with the industry standard option, lwIP. A lot was added in this one iteration, mostly because I wanted to get to MQTT rather than learn the pieces of the network stack, though that would also be fun. Another day perhaps.
+
+## 9: Ethernet driver
+
+This goes with the previous iteration, and connects the protocol logic to the physical network hardware. The order could have been reversed, but testing it would have involved writing throwaway code. 
