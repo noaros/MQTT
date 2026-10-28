@@ -18,13 +18,20 @@
 #define PBUF_POOL_SIZE          8
 #define PBUF_POOL_BUFSIZE       1536
 
-/* Protocols: IPv4 with ARP, ICMP (ping), UDP and DHCP. TCP comes later,
- * with MQTT. */
+/* Protocols: IPv4 with ARP, ICMP (ping), UDP and DHCP, and TCP for MQTT */
 #define LWIP_ARP                1
 #define LWIP_ICMP               1
 #define LWIP_UDP                1
 #define LWIP_DHCP               1
-#define LWIP_TCP                0
+#define LWIP_TCP                1
+
+/* TCP sizes. MSS (maximum segment size) = the most data per segment:
+ * a 1500-byte IP packet minus 20 bytes each of IP and TCP header. The
+ * send buffer and receive window hold two full segments each, plenty
+ * for small MQTT messages. */
+#define TCP_MSS                 1460
+#define TCP_SND_BUF             (2 * TCP_MSS)
+#define TCP_WND                 (2 * TCP_MSS)
 
 #define LWIP_STATS              0
 
