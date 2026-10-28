@@ -2,7 +2,8 @@
  *
  * Reads the internal temperature sensor once per second and prints it on
  * USART3 (PD8 = TX), which the Nucleo routes to the ST-LINK virtual COM
- * port. Open the port at 115200 8N1.
+ * port. Open the port at 115200 8N1. Also reads the Ethernet PHY's ID over
+ * MDIO at startup and reports whenever the link goes up or down.
  *
  * Clock: 168 MHz from the PLL, fed by the 8 MHz clock the ST-LINK supplies
  * on the HSE input. Falls back to HSI = 16 MHz if that clock is missing. */
@@ -19,6 +20,19 @@
 #define RCC_AHB1ENR   REG(RCC_BASE + 0x30)
 #define RCC_APB1ENR   REG(RCC_BASE + 0x40)
 #define RCC_APB2ENR   REG(RCC_BASE + 0x44)
+
+/* SYSCFG (RM0090 section 9.2) */
+#define SYSCFG_PMC    REG(0x40013800 + 0x04)
+
+/* GPIOA, GPIOC (RM0090 section 8.4) */
+#define GPIOA_BASE    0x40020000
+#define GPIOA_MODER   REG(GPIOA_BASE + 0x00)
+#define GPIOA_OSPEEDR REG(GPIOA_BASE + 0x08)
+#define GPIOA_AFRL    REG(GPIOA_BASE + 0x20)
+#define GPIOC_BASE    0x40020800
+#define GPIOC_MODER   REG(GPIOC_BASE + 0x00)
+#define GPIOC_OSPEEDR REG(GPIOC_BASE + 0x08)
+#define GPIOC_AFRL    REG(GPIOC_BASE + 0x20)
 
 /* Flash interface (RM0090 section 3.9) */
 #define FLASH_ACR     REG(0x40023C00)
@@ -49,6 +63,19 @@
  * 30 C and 110 C with VDDA = 3.3 V (datasheet section 6.3.22) */
 #define TS_CAL1       (*(volatile uint16_t *)0x1FFF7A2C)
 #define TS_CAL2       (*(volatile uint16_t *)0x1FFF7A2E)
+
+/* Ethernet MAC station management (MDIO) registers (RM0090 section 33.8) */
+#define ETH_BASE      0x40028000
+#define ETH_MACMIIAR  REG(ETH_BASE + 0x10)
+#define ETH_MACMIIDR  REG(ETH_BASE + 0x14)
+
+/* Standard PHY registers (IEEE 802.3 clause 22) */
+#define PHY_BCR       0   /* basic control */
+#define PHY_BSR       1   /* basic status */
+#define PHY_ID1       2
+#define PHY_ID2       3
+/* LAN8742A vendor-specific register (LAN8742A datasheet section 4.2) */
+#define PHY_SCSR      31  /* special control/status: negotiated speed */
 
 /* SysTick (Cortex-M4 core peripheral) */
 #define SYST_CSR      REG(0xE000E010)
@@ -163,6 +190,109 @@ void uart_putu(uint32_t n) {
     }
 }
 
+/* Print a 16-bit value as 4 hex digits */
+void uart_puthex16(uint32_t n) {
+    for (int shift = 12; shift >= 0; shift -= 4) {
+        uart_putc("0123456789ABCDEF"[(n >> shift) & 0xFu]);
+    }
+}
+
+/* Set up the Ethernet MAC just enough to use its MDIO interface:
+ * MDC on PC1 and MDIO on PA2, both alternate function 11. */
+void mdio_init(void) {
+    RCC_AHB1ENR |= (1u << 0) | (1u << 2);  /* GPIOAEN, GPIOCEN */
+    RCC_APB2ENR |= 1u << 14;               /* SYSCFGEN */
+
+    /* Select RMII (the Nucleo's PHY connection). Must be done before the
+     * MAC clock is enabled. */
+    SYSCFG_PMC |= 1u << 23;  /* MII_RMII_SEL */
+
+    RCC_AHB1ENR |= 1u << 25;  /* ETHMACEN */
+
+    /* PA2 = MDIO, PC1 = MDC: alternate function mode, AF11, high speed */
+    GPIOA_MODER   = (GPIOA_MODER & ~(3u << 4)) | (2u << 4);
+    GPIOA_OSPEEDR |= 3u << 4;
+    GPIOA_AFRL    = (GPIOA_AFRL & ~(0xFu << 8)) | (11u << 8);
+    GPIOC_MODER   = (GPIOC_MODER & ~(3u << 2)) | (2u << 2);
+    GPIOC_OSPEEDR |= 3u << 2;
+    GPIOC_AFRL    = (GPIOC_AFRL & ~(0xFu << 4)) | (11u << 4);
+}
+
+/* Read a 16-bit PHY register over MDIO. A missing PHY reads as 0xFFFF. */
+uint32_t mdio_read(uint32_t phy, uint32_t reg) {
+    /* MDC must be <= 2.5 MHz. Clock range CR: HCLK / 102 for 150-168 MHz
+     * (1.65 MHz), HCLK / 16 for 20-35 MHz, also fine on the 16 MHz
+     * fallback (1 MHz). */
+    uint32_t cr = sysclk_hz >= 150000000u ? 4u : 2u;
+
+    while (ETH_MACMIIAR & 1u) {  /* wait for MB (busy) to clear */
+    }
+    ETH_MACMIIAR = (phy << 11) | (reg << 6) | (cr << 2) | 1u;  /* read, MB */
+    while (ETH_MACMIIAR & 1u) {
+    }
+    return ETH_MACMIIDR & 0xFFFFu;
+}
+
+/* Write a 16-bit PHY register over MDIO */
+void mdio_write(uint32_t phy, uint32_t reg, uint32_t value) {
+    uint32_t cr = sysclk_hz >= 150000000u ? 4u : 2u;
+
+    while (ETH_MACMIIAR & 1u) {
+    }
+    ETH_MACMIIDR = value;
+    ETH_MACMIIAR = (phy << 11) | (reg << 6) | (cr << 2) | 2u | 1u;  /* MW, MB */
+    while (ETH_MACMIIAR & 1u) {
+    }
+}
+
+/* Find the PHY by trying all 32 addresses, return its address or -1 */
+int phy_find(void) {
+    for (uint32_t addr = 0; addr < 32; addr++) {
+        if (mdio_read(addr, PHY_ID1) != 0xFFFFu) {
+            return (int)addr;
+        }
+    }
+    return -1;
+}
+
+/* Soft-reset the PHY, then enable and start auto-negotiation. The
+ * LAN8742A takes its power-up defaults from strap pins shared with RMII
+ * data lines; on this board they come up as 10 Mbit/s half duplex with
+ * auto-negotiation off (BCR = 0x0000), so set it explicitly. */
+void phy_init(uint32_t phy) {
+    mdio_write(phy, PHY_BCR, 1u << 15);  /* soft reset */
+    uint32_t start = ticks_ms;
+    while (mdio_read(phy, PHY_BCR) & (1u << 15)) {  /* self-clearing */
+        if (ticks_ms - start > 500) {
+            break;
+        }
+    }
+    mdio_write(phy, PHY_BCR, (1u << 12) | (1u << 9));  /* ANEN | restart AN */
+}
+
+/* Return 1 if the link is up. The link bit in the basic status register
+ * latches low: after a link drop it reads 0 once even if the link is back,
+ * so read it twice to get the current state. */
+int phy_link_up(uint32_t phy) {
+    mdio_read(phy, PHY_BSR);
+    return (mdio_read(phy, PHY_BSR) >> 2) & 1u;
+}
+
+void phy_print_link(uint32_t phy, int up) {
+    if (!up) {
+        uart_puts("link down\r\n");
+        return;
+    }
+    /* SCSR bits 4:2: 001 = 10 half, 101 = 10 full, 010 = 100 half,
+     * 110 = 100 full */
+    uint32_t speed = (mdio_read(phy, PHY_SCSR) >> 2) & 7u;
+    uart_puts("link up, ");
+    uart_puts(speed & 2u ? "100" : "10");
+    uart_puts(" Mbit/s ");
+    uart_puts(speed & 4u ? "full" : "half");
+    uart_puts(" duplex\r\n");
+}
+
 void adc_init(void) {
     RCC_APB2ENR |= 1u << 8;  /* ADC1EN */
 
@@ -213,8 +343,34 @@ int main(void) {
         uart_puts("HSE clock missing, running on HSI 16 MHz\r\n");
     }
     adc_init();
+    mdio_init();
+
+    int phy = phy_find();
+    int link = 0;
+    if (phy < 0) {
+        uart_puts("no PHY found\r\n");
+    } else {
+        phy_init((uint32_t)phy);
+        uart_puts("PHY at address ");
+        uart_putu((uint32_t)phy);
+        uart_puts(", ID ");
+        uart_puthex16(mdio_read((uint32_t)phy, PHY_ID1));
+        uart_putc(':');
+        uart_puthex16(mdio_read((uint32_t)phy, PHY_ID2));
+        uart_puts("\r\n");
+        link = phy_link_up((uint32_t)phy);
+        phy_print_link((uint32_t)phy, link);
+    }
 
     for (;;) {
+        if (phy >= 0) {
+            int now = phy_link_up((uint32_t)phy);
+            if (now != link) {
+                link = now;
+                phy_print_link((uint32_t)phy, link);
+            }
+        }
+
         int32_t t = temp_tenths(adc_read());
         uart_puts("temp ");
         if (t < 0) {
