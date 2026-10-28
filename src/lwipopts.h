@@ -28,4 +28,7 @@
 
 #define LWIP_STATS              0
 
+/* Call us when the IP address changes, to print the one DHCP got */
+#define LWIP_NETIF_STATUS_CALLBACK  1
+
 #endif
