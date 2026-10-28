@@ -42,3 +42,6 @@ Ok so now we get to the interesting parts, the point of the project. The simples
 
 Setup Ethernet hardware (PHY), turn on auto-negotiation for a faster, more typical connection, and print link up and down events along with the Ethernet chip id.
 
+## 8: Network stack
+
+I had a choice between lwIP and Mongoose. The latter is made by the company who made the demo that got me started on this journey with my very first project in this repo. That was tempting, plus it is simpler and so fits my style. However, there are annoying license terms that would keep others from using it in real world settings, so I went with the industry standard option, lwIP. A lot was added in this one iteration, mostly because I wanted to get to MQTT rather than learn the pieces of the network stack, though that would also be fun. Another day perhaps.
