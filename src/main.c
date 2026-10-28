@@ -5,10 +5,20 @@
  * port. Open the port at 115200 8N1. Also reads the Ethernet PHY's ID over
  * MDIO at startup and reports whenever the link goes up or down.
  *
+ * Runs the lwIP network stack with DHCP. There is no Ethernet driver yet:
+ * frames lwIP wants to send are printed instead of transmitted.
+ *
  * Clock: 168 MHz from the PLL, fed by the 8 MHz clock the ST-LINK supplies
  * on the HSE input. Falls back to HSI = 16 MHz if that clock is missing. */
 
 #include <stdint.h>
+
+#include "lwip/dhcp.h"
+#include "lwip/etharp.h"
+#include "lwip/init.h"
+#include "lwip/netif.h"
+#include "lwip/timeouts.h"
+#include "netif/ethernet.h"
 
 #define REG(addr) (*(volatile uint32_t *)(addr))
 
@@ -63,6 +73,10 @@
  * 30 C and 110 C with VDDA = 3.3 V (datasheet section 6.3.22) */
 #define TS_CAL1       (*(volatile uint16_t *)0x1FFF7A2C)
 #define TS_CAL2       (*(volatile uint16_t *)0x1FFF7A2E)
+
+/* 96-bit unique device ID, programmed by ST in production (RM0090
+ * section 39.1) */
+#define UID           ((const volatile uint8_t *)0x1FFF7A10)
 
 /* Ethernet MAC station management (MDIO) registers (RM0090 section 33.8) */
 #define ETH_BASE      0x40028000
@@ -190,10 +204,25 @@ void uart_putu(uint32_t n) {
     }
 }
 
+/* Print an 8-bit value as 2 hex digits */
+void uart_puthex8(uint32_t n) {
+    uart_putc("0123456789ABCDEF"[(n >> 4) & 0xFu]);
+    uart_putc("0123456789ABCDEF"[n & 0xFu]);
+}
+
 /* Print a 16-bit value as 4 hex digits */
 void uart_puthex16(uint32_t n) {
-    for (int shift = 12; shift >= 0; shift -= 4) {
-        uart_putc("0123456789ABCDEF"[(n >> shift) & 0xFu]);
+    uart_puthex8(n >> 8);
+    uart_puthex8(n);
+}
+
+/* Print a MAC address as AA:BB:CC:DD:EE:FF */
+void uart_putmac(const uint8_t *mac) {
+    for (int i = 0; i < 6; i++) {
+        if (i) {
+            uart_putc(':');
+        }
+        uart_puthex8(mac[i]);
     }
 }
 
@@ -293,6 +322,96 @@ void phy_print_link(uint32_t phy, int up) {
     uart_puts(" duplex\r\n");
 }
 
+/* lwIP's clock: milliseconds since boot */
+uint32_t sys_now(void) {
+    return ticks_ms;
+}
+
+/* Random numbers for lwIP (LWIP_RAND in arch/cc.h): xorshift32, seeded
+ * from the unique ID so each board gets its own sequence. Fine for DHCP;
+ * TCP will want the hardware random number generator. */
+uint32_t lwip_rand(void) {
+    static uint32_t x;
+    if (x == 0) {
+        for (int i = 0; i < 12; i++) {
+            x = x * 31 + UID[i];
+        }
+        x |= 1;  /* xorshift must not start at 0 */
+    }
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    return x;
+}
+
+/* Make a MAC address from the unique ID. The first byte 0x02 marks it
+ * "locally administered": outside any vendor's range, so it can't clash
+ * with a real one. The 12 ID bytes are folded into the other 5. */
+void make_mac(uint8_t *mac) {
+    mac[0] = 0x02;
+    for (int i = 1; i < 6; i++) {
+        mac[i] = 0;
+    }
+    for (int i = 0; i < 12; i++) {
+        mac[1 + i % 5] ^= UID[i];
+    }
+}
+
+struct netif eth_netif;
+
+/* Stand-in for the Ethernet driver's transmit: print the size, EtherType
+ * and destination of each frame lwIP hands us, then drop it */
+err_t eth_linkoutput(struct netif *netif, struct pbuf *p) {
+    (void)netif;
+    uint8_t hdr[14];  /* destination MAC, source MAC, EtherType */
+    pbuf_copy_partial(p, hdr, sizeof hdr, 0);
+    uart_puts("lwIP tx ");
+    uart_putu(p->tot_len);
+    uart_puts(" bytes, type ");
+    uart_puthex16((uint32_t)hdr[12] << 8 | hdr[13]);
+    uart_puts(", to ");
+    uart_putmac(hdr);
+    uart_puts("\r\n");
+    return ERR_OK;
+}
+
+/* Called by netif_add() to set up our network interface */
+err_t eth_netif_init(struct netif *netif) {
+    netif->name[0] = 'e';
+    netif->name[1] = '0';
+    netif->output = etharp_output;  /* IP packet: find the MAC via ARP */
+    netif->linkoutput = eth_linkoutput;  /* complete Ethernet frame */
+    netif->mtu = 1500;
+    netif->hwaddr_len = 6;
+    make_mac(netif->hwaddr);
+    netif->flags = NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP
+                 | NETIF_FLAG_ETHERNET;
+    return ERR_OK;
+}
+
+/* Bring up lwIP with one Ethernet interface and start DHCP. DHCP waits
+ * for netif_set_link_up() before it sends anything. */
+void net_init(void) {
+    lwip_init();
+    netif_add(&eth_netif, IP4_ADDR_ANY4, IP4_ADDR_ANY4, IP4_ADDR_ANY4,
+              NULL, eth_netif_init, ethernet_input);
+    netif_set_default(&eth_netif);
+    netif_set_up(&eth_netif);
+    dhcp_start(&eth_netif);
+    uart_puts("lwIP up, MAC ");
+    uart_putmac(eth_netif.hwaddr);
+    uart_puts("\r\n");
+}
+
+/* Tell lwIP whether the cable is connected */
+void net_set_link(int up) {
+    if (up) {
+        netif_set_link_up(&eth_netif);
+    } else {
+        netif_set_link_down(&eth_netif);
+    }
+}
+
 void adc_init(void) {
     RCC_APB2ENR |= 1u << 8;  /* ADC1EN */
 
@@ -344,6 +463,7 @@ int main(void) {
     }
     adc_init();
     mdio_init();
+    net_init();
 
     int phy = phy_find();
     int link = 0;
@@ -360,14 +480,26 @@ int main(void) {
         uart_puts("\r\n");
         link = phy_link_up((uint32_t)phy);
         phy_print_link((uint32_t)phy, link);
+        net_set_link(link);
     }
 
+    /* lwIP needs sys_check_timeouts() called often (DHCP, ARP timers), so
+     * the loop no longer sleeps: it spins, and does the once-per-second
+     * work whenever a second has passed. */
+    uint32_t last = ticks_ms - 1000;
     for (;;) {
+        sys_check_timeouts();
+        if (ticks_ms - last < 1000) {
+            continue;
+        }
+        last += 1000;
+
         if (phy >= 0) {
             int now = phy_link_up((uint32_t)phy);
             if (now != link) {
                 link = now;
                 phy_print_link((uint32_t)phy, link);
+                net_set_link(link);
             }
         }
 
@@ -381,6 +513,5 @@ int main(void) {
         uart_putc('.');
         uart_putu((uint32_t)t % 10);
         uart_puts(" C\r\n");
-        delay_ms(1000);
     }
 }

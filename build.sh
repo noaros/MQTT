@@ -5,13 +5,17 @@ cd "$(dirname "$0")"
 
 TARGET=mqtt
 BUILD=build
-SRCS=(src/startup.c src/main.c)
+LWIP=lib/lwip/src
+SRCS=(src/startup.c src/main.c
+      $LWIP/core/*.c $LWIP/core/ipv4/*.c $LWIP/netif/ethernet.c)
 
 CPU=(-mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16)
 CFLAGS=("${CPU[@]}" -std=c11 -Wall -Wextra -Os -g -ffreestanding
-        -ffunction-sections -fdata-sections)
+        -ffunction-sections -fdata-sections -Isrc -I$LWIP/include)
+# The C library (newlib-nano) is linked only for memcpy, memset and friends
 LDFLAGS=("${CPU[@]}" -T linker.ld -nostdlib -Wl,--gc-sections
          "-Wl,-Map=$BUILD/$TARGET.map")
+LIBS=(-lc_nano -lgcc)
 
 OBJS=()
 for src in "${SRCS[@]}"; do
@@ -24,6 +28,6 @@ for src in "${SRCS[@]}"; do
 done
 
 set -x
-arm-none-eabi-gcc "${LDFLAGS[@]}" "${OBJS[@]}" -o "$BUILD/$TARGET.elf"
+arm-none-eabi-gcc "${LDFLAGS[@]}" "${OBJS[@]}" "${LIBS[@]}" -o "$BUILD/$TARGET.elf"
 arm-none-eabi-size "$BUILD/$TARGET.elf"
 arm-none-eabi-objcopy -O binary "$BUILD/$TARGET.elf" "$BUILD/$TARGET.bin"
