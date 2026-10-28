@@ -6,6 +6,8 @@ The challenge in a post Claude world is how to still learn things efficiently wh
 
 Apologies for getting sidetracked on some unconventional nit picky style aspects, but this was my first time using Claude in this way, and was confronted with preference choices that were very easy to implement either way with just a few words to Claude. I'm also continually amazed at all the little things Claude does without me asking (or even knowing to ask), such as testing its own work and noticing more data in the serial port than it was expecting, and even correctly theorizing that this was left over from a prior attempt!
 
+The following are the iterations for this project. Each one gives me time to think, understand, and change things. It is a lot of fun, actually.
+
 ## 0: UART printf starting point
 
 This is just a typical starting point, a board with flashed firmware that periodically prints something to a serial port. I'll put it in branch 0. 
@@ -26,3 +28,7 @@ More playing with Claude, I had it move the opening braces of functions to the s
 ## 4: Static
 
 Removed 'static' keyword for less visual clutter. It really does look so much cleaner, but the trade-off is slightly larger file size, worse optimization, and global conflict. Most would probably want the keyword, so I really should just get used to it. Maybe in the next project. It is fun think about the tradeoffs. And amazing how one refactoring vs another, even an unconventional one like this, is a simple Claude request away.
+
+## 5: Temperature!
+
+Read and print the temperature periodically instead of 'hello'. Rename build file.
