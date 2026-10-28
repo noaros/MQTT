@@ -37,3 +37,7 @@ Read and print the temperature periodically instead of 'hello'. Rename build out
 ## 6: Speed
 
 Ok so now we get to the interesting parts, the point of the project. The simplest path to MQTT for this board is to use its ethernet port, and for that the clock speed of the board must be increased. I, er, Claude, changed it from the default of 16MHz to 168.
+
+## 7: PHY
+
+First contact with the Ethernet hardware. The board's Ethernet PHY chip, which sits between the microcontroller and the RJ45 jack, is configured over a two-wire management bus called MDIO. This iteration enables the Ethernet MAC clock in RMII mode, sets up the MDC and MDIO pins, scans for the PHY's address, resets it, and turns on auto-negotiation (it powers up stuck at 10 Mbit/s half duplex). It then prints the PHY's ID and reports link up/down with the negotiated speed and duplex as the cable is plugged in and out. No packets yet, but proof that the chip is alive and talking.
