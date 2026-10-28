@@ -32,3 +32,8 @@ Removed 'static' keyword for less visual clutter. It really does look so much cl
 ## 5: Temperature!
 
 Read and print the temperature periodically instead of 'hello'. Rename build output file.
+
+
+## 6: Speed
+
+Ok so now we get to the interesting parts, the point of the project. The simplest path to MQTT for this board is to use its ethernet port, and for that the clock speed of the board must be increased. I, er, Claude, changed it from the default of 16MHz to 168.
