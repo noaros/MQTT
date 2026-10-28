@@ -54,3 +54,6 @@ This goes with the previous iteration, and connects the protocol logic to the ph
 
 The MQTT server, installed on my laptop and not represented in the codebase.
 
+## 11: TCP
+
+TCP is turned on, since MQTT needs it. A minor port randomization tweak was added as well, to make smoother connections upon reset.
