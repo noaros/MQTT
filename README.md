@@ -57,3 +57,9 @@ The MQTT server, installed on my laptop and not represented in the codebase.
 ## 11: TCP
 
 TCP is turned on, since MQTT needs it. A minor port randomization tweak was added as well, to make smoother connections upon reset.
+
+## 12: Mosquitto
+
+Added Mosquitto client into the code. Mosquitto broker receives temperature messages from the board over network.
+
+<img width="1394" height="930" alt="image" src="https://github.com/user-attachments/assets/83de09b9-1199-4e4e-a203-a96447b65b88" />
