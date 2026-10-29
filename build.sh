@@ -7,7 +7,8 @@ TARGET=mqtt
 BUILD=build
 LWIP=lib/lwip/src
 SRCS=(src/startup.c src/main.c
-      $LWIP/core/*.c $LWIP/core/ipv4/*.c $LWIP/netif/ethernet.c)
+      $LWIP/core/*.c $LWIP/core/ipv4/*.c $LWIP/netif/ethernet.c
+      $LWIP/apps/mqtt/mqtt.c)
 
 CPU=(-mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16)
 CFLAGS=("${CPU[@]}" -std=c11 -Wall -Wextra -Os -g -ffreestanding

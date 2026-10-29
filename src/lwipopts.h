@@ -35,6 +35,10 @@
 
 #define LWIP_STATS              0
 
+/* Timers: lwIP counts the ones it needs itself; the MQTT client adds one
+ * more, for its keep-alive pings */
+#define MEMP_NUM_SYS_TIMEOUT    (LWIP_NUM_SYS_TIMEOUT_INTERNAL + 1)
+
 /* Call us when the IP address changes, to print the one DHCP got */
 #define LWIP_NETIF_STATUS_CALLBACK  1
 

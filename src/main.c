@@ -7,13 +7,15 @@
  *
  * Runs the lwIP network stack on top of an Ethernet driver that moves
  * frames to and from the MAC by DMA. The board gets its IP address with
- * DHCP and answers ping.
+ * DHCP, answers ping, and publishes each temperature reading over MQTT to
+ * the broker on the PC.
  *
  * Clock: 168 MHz from the PLL, fed by the 8 MHz clock the ST-LINK supplies
  * on the HSE input. Falls back to HSI = 16 MHz if that clock is missing. */
 
 #include <stdint.h>
 
+#include "lwip/apps/mqtt.h"
 #include "lwip/dhcp.h"
 #include "lwip/etharp.h"
 #include "lwip/init.h"
@@ -615,6 +617,69 @@ void link_changed(uint32_t phy, int up) {
     }
 }
 
+/* MQTT: publish the temperature to the Mosquitto broker on the PC */
+#define MQTT_BROKER       "192.168.1.109"
+#define MQTT_BROKER_PORT  1883
+#define MQTT_TOPIC        "nucleo/temperature"
+
+mqtt_client_t *mqtt;
+uint32_t mqtt_last_try;
+
+/* Called by the MQTT client when a connection attempt finishes, or when
+ * an open connection ends */
+void mqtt_status(mqtt_client_t *client, void *arg,
+                 mqtt_connection_status_t status) {
+    (void)client;
+    (void)arg;
+    if (status == MQTT_CONNECT_ACCEPTED) {
+        uart_puts("MQTT connected to " MQTT_BROKER "\r\n");
+    } else {
+        /* 256 = disconnected or refused, 257 = timeout, others are the
+         * broker's refusal codes */
+        uart_puts("MQTT not connected, status ");
+        uart_putu(status);
+        uart_puts("\r\n");
+    }
+}
+
+/* Connect to the broker once we have an IP address, retrying every 5
+ * seconds while not connected. While an attempt is under way,
+ * mqtt_client_connect() just returns ERR_ISCONN. */
+void mqtt_try_connect(void) {
+    static const struct mqtt_connect_client_info_t info = {
+        .client_id = "nucleo-f429",
+        .keep_alive = 60,  /* seconds: ping the broker when idle */
+    };
+
+    if (!dhcp_supplied_address(&eth_netif)
+            || ticks_ms - mqtt_last_try < 5000) {
+        return;
+    }
+    if (mqtt == NULL) {
+        mqtt = mqtt_client_new();
+        if (mqtt == NULL) {
+            return;
+        }
+    }
+    if (mqtt_client_is_connected(mqtt)) {
+        return;
+    }
+    mqtt_last_try = ticks_ms;
+
+    ip_addr_t broker;
+    ipaddr_aton(MQTT_BROKER, &broker);
+    mqtt_client_connect(mqtt, &broker, MQTT_BROKER_PORT, mqtt_status, NULL,
+                        &info);
+}
+
+/* Publish one reading if connected. QoS 0: sent once, not acknowledged;
+ * a lost reading is replaced by the next one a second later anyway. */
+void mqtt_publish_text(const char *text, int len) {
+    if (mqtt != NULL && mqtt_client_is_connected(mqtt)) {
+        mqtt_publish(mqtt, MQTT_TOPIC, text, (u16_t)len, 0, 0, NULL, NULL);
+    }
+}
+
 void adc_init(void) {
     RCC_APB2ENR |= 1u << 8;  /* ADC1EN */
 
@@ -649,6 +714,31 @@ int32_t temp_tenths(uint32_t raw) {
     int32_t cal1 = TS_CAL1;
     int32_t cal2 = TS_CAL2;
     return 300 + (800 * ((int32_t)raw - cal1)) / (cal2 - cal1);
+}
+
+/* Format tenths of a degree as text, e.g. 385 -> "38.5". buf needs room
+ * for 13 characters. Returns the length. */
+int format_tenths(char *buf, int32_t t) {
+    uint32_t u = t < 0 ? -(uint32_t)t : (uint32_t)t;
+    uint32_t whole = u / 10;
+    char digits[10];
+    int n = 0;
+    int len = 0;
+
+    if (t < 0) {
+        buf[len++] = '-';
+    }
+    do {
+        digits[n++] = (char)('0' + whole % 10);
+        whole /= 10;
+    } while (whole);
+    while (n) {
+        buf[len++] = digits[--n];
+    }
+    buf[len++] = '.';
+    buf[len++] = (char)('0' + u % 10);
+    buf[len] = '\0';
+    return len;
 }
 
 void systick_init(void) {
@@ -709,15 +799,13 @@ int main(void) {
             }
         }
 
-        int32_t t = temp_tenths(adc_read());
+        char text[13];
+        int len = format_tenths(text, temp_tenths(adc_read()));
         uart_puts("temp ");
-        if (t < 0) {
-            uart_putc('-');
-            t = -t;
-        }
-        uart_putu((uint32_t)t / 10);
-        uart_putc('.');
-        uart_putu((uint32_t)t % 10);
+        uart_puts(text);
         uart_puts(" C\r\n");
+
+        mqtt_try_connect();
+        mqtt_publish_text(text, len);
     }
 }
