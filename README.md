@@ -60,6 +60,8 @@ TCP is turned on, since MQTT needs it. A minor port randomization tweak was adde
 
 ## 12: Mosquitto
 
-Added Mosquitto client into the code. Mosquitto broker receives temperature messages from the board over network.
+Added Mosquitto client into the code. With Mosquitto there is one "broker" and potentially many "clients". In this case the firmware code contains a client that publishes the temperature to a topic on the broker over the network, and a command line client subscribes to that topic to receive the temperature messages.
 
 <img width="1394" height="930" alt="image" src="https://github.com/user-attachments/assets/83de09b9-1199-4e4e-a203-a96447b65b88" />
+
+A dashboard would look prettier, but at this point we have illustrated a minimal example of successful MQTT communication.
